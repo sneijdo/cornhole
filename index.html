@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Cornhole Skam-Cup</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #0c1a0c;
+            --surface: #152015;
+            --card: #1e301e;
+            --border: #2a402a;
+            --accent: #3d8b3d;
+            --accent-bright: #52b852;
+            --safe: #4caf50;
+            --warning: #ff9800;
+            --danger: #e53935;
+            --shame: #b71c1c;
+            --text: #e8f5e8;
+            --text-dim: #7aaa7a;
+            --gold: #ffc107;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* ---- HEADER ---- */
+        header {
+            background: var(--surface);
+            border-bottom: 2px solid var(--accent);
+            padding: 0.75rem 1rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .header-title { font-size: 1.1rem; font-weight: 800; color: var(--gold); letter-spacing: 1px; text-transform: uppercase; }
+        .round-pill { background: var(--accent); color: white; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.8rem; font-weight: 700; }
+        .round-pill.danger-pill { background: var(--shame); animation: pill-pulse 1s ease-in-out infinite; }
+        @keyframes pill-pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+        /* ---- CONTAINER ---- */
+        .container { max-width: 560px; margin: 0 auto; padding: 1rem; }
+
+        /* ================================================================
+           SHAME BOARD
+        ================================================================ */
+        .shame-board { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.85rem; margin-bottom: 1rem; }
+        .shame-board-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; color: var(--text-dim); font-weight: 600; margin-bottom: 0.65rem; }
+        .shame-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem; }
+        .sp {
+            display: flex; align-items: center; gap: 0.4rem;
+            padding: 0.35rem 0.5rem; border-radius: 8px; border-left: 3px solid transparent;
+            background: var(--card); transition: all 0.3s ease; min-width: 0;
+        }
+        .sp.safe { border-left-color: #2a402a; }
+        .sp.warn { border-left-color: var(--warning); background: #1e1400; }
+        .sp.dngr { border-left-color: var(--danger);  background: #1e0808; }
+        .sp.shame { border-left-color: #ff2222; background: #1a0000; animation: sp-glow 1.2s ease-in-out infinite; }
+        @keyframes sp-glow { 0%,100%{box-shadow:inset 0 0 0 0 rgba(255,30,30,0)} 50%{box-shadow:inset 0 0 8px 0 rgba(255,30,30,0.3)} }
+        .sp-icon { font-size: 0.75rem; flex-shrink: 0; }
+        .sp-name { flex: 1; font-size: 0.8rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .sp.safe  .sp-name { color: var(--text-dim); }
+        .sp.warn  .sp-name { color: var(--warning); }
+        .sp.dngr  .sp-name { color: #ff9090; }
+        .sp.shame .sp-name { color: #ff5555; }
+        .sp-stats { text-align: right; flex-shrink: 0; }
+        .sp-loss { display: block; font-size: 0.8rem; font-weight: 800; line-height: 1.2; }
+        .sp-diff { display: block; font-size: 0.6rem; line-height: 1.2; }
+        .sp.safe  .sp-loss { color: var(--text-dim); }
+        .sp.warn  .sp-loss { color: var(--warning); }
+        .sp.dngr  .sp-loss { color: var(--danger); }
+        .sp.shame .sp-loss { color: #ff4444; }
+        .sp-diff.neg { color: var(--danger); }
+        .sp-diff.pos { color: var(--safe); }
+        .sp-diff.zer { color: var(--text-dim); }
+
+        /* ================================================================
+           MATCH CARDS
+        ================================================================ */
+        .section-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; color: var(--text-dim); margin-bottom: 0.6rem; font-weight: 600; }
+        .match-card {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: 12px; padding: 0.85rem; margin-bottom: 0.6rem; transition: border-color 0.3s;
+        }
+        .match-card.done { border-color: var(--accent); animation: card-settle 0.35s ease; }
+        .match-card.high-stakes { border-color: var(--warning); }
+        .match-card.high-stakes.done { border-color: var(--accent); }
+        .match-card.pending { border-color: var(--gold); }
+        @keyframes card-settle { 0%{transform:scale(0.985);opacity:0.6} 60%{transform:scale(1.008)} 100%{transform:scale(1);opacity:1} }
+
+        .match-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.55rem; }
+        .match-num { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 1px; }
+        .high-stakes-badge { font-size: 0.65rem; font-weight: 700; color: var(--warning); background: #2a1800; border: 1px solid var(--warning); border-radius: 4px; padding: 0.1rem 0.4rem; }
+        .undo-btn { background: none; border: 1px solid #444; color: var(--text-dim); border-radius: 6px; padding: 0.15rem 0.5rem; font-size: 0.65rem; cursor: pointer; }
+        .undo-btn:hover { border-color: var(--warning); color: var(--warning); }
+
+        /* Player pick buttons */
+        .match-row { display: flex; align-items: stretch; gap: 0.5rem; }
+        .pb {
+            flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.25rem;
+            padding: 0.75rem 0.4rem; border: 2px solid #444; border-radius: 10px;
+            background: var(--card); color: var(--text); font-size: 0.95rem; font-weight: 700;
+            cursor: pointer; transition: all 0.15s; min-height: 68px; text-align: center;
+        }
+        .pb:active:not(:disabled) { transform: scale(0.93); }
+        .pb:hover:not(:disabled) { border-color: var(--accent-bright); background: #1e351e; }
+        .pb:disabled { cursor: default; }
+        .pb-risk { font-size: 0.65rem; padding: 0.1rem 0.4rem; border-radius: 4px; font-weight: 700; }
+        .pb-risk.safe { color: var(--text-dim); }
+        .pb-risk.warn { color: var(--warning); background: #2a1800; }
+        .pb-risk.dngr { color: #ff9090; background: #2a0808; }
+        .pb-risk.shame{ color: #ff5555; background: #2a0000; }
+        .pb.winner { background: #0d2a0d; border-color: var(--safe); color: var(--safe); }
+        .pb.loser  { background: #2a0505; border-color: var(--danger); color: #ff8080; }
+        .pb.pending-win  { background: #1a2e1a; border-color: var(--gold); color: var(--gold); }
+        .pb.pending-lose { background: var(--card); border-color: #555; color: var(--text-dim); opacity: 0.6; }
+        .pb-result { font-size: 0.7rem; font-weight: 400; }
+        .pb.winner .pb-result { color: var(--safe); }
+        .pb.loser  .pb-result { color: #ff8080; }
+        .vs { display: flex; align-items: center; color: var(--text-dim); font-weight: 700; font-size: 0.8rem; flex-shrink: 0; }
+        .match-hint { text-align: center; font-size: 0.7rem; color: var(--text-dim); margin-top: 0.5rem; }
+
+        /* Score entry step */
+        .score-entry { border-top: 1px solid var(--border); margin-top: 0.75rem; padding-top: 0.75rem; }
+        .score-entry-title { font-size: 0.8rem; color: var(--text-dim); text-align: center; margin-bottom: 0.6rem; }
+        .score-entry-title strong { color: var(--danger); }
+        .score-row { display: flex; align-items: center; justify-content: center; gap: 1rem; margin-bottom: 0.75rem; }
+        .score-btn {
+            width: 48px; height: 48px; border-radius: 50%; border: 2px solid #444;
+            background: var(--card); color: var(--text); font-size: 1.4rem; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; transition: all 0.1s;
+            user-select: none; -webkit-user-select: none;
+        }
+        .score-btn:active { transform: scale(0.88); background: var(--accent); border-color: var(--accent); }
+        .score-num { font-size: 2.2rem; font-weight: 900; min-width: 3rem; text-align: center; color: var(--text); }
+        .score-actions { display: flex; gap: 0.5rem; }
+        .btn-back-small {
+            flex: 1; padding: 0.65rem; background: var(--card); color: var(--text-dim);
+            border: 1px solid var(--border); border-radius: 10px; font-size: 0.85rem; cursor: pointer;
+        }
+        .btn-confirm {
+            flex: 2; padding: 0.65rem; background: var(--accent); color: white;
+            border: none; border-radius: 10px; font-size: 0.9rem; font-weight: 700; cursor: pointer;
+        }
+        .btn-confirm:active { background: var(--accent-bright); transform: scale(0.97); }
+
+        /* ---- PROGRESS BAR ---- */
+        .progress-bar-wrap { background: var(--card); border-radius: 4px; height: 4px; margin: 0.6rem 0 1rem; overflow: hidden; }
+        .progress-bar-fill { height: 100%; background: var(--accent-bright); border-radius: 4px; transition: width 0.4s ease; }
+
+        /* ---- BUTTONS ---- */
+        .btn { display: block; width: 100%; padding: 0.9rem 1rem; border: none; border-radius: 12px; font-size: 1rem; font-weight: 700; cursor: pointer; transition: all 0.15s; text-align: center; text-transform: uppercase; letter-spacing: 1px; margin-top: 0.5rem; }
+        .btn:active { transform: scale(0.97); }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-primary:hover { background: var(--accent-bright); }
+        .btn-end     { background: var(--shame); color: white; }
+        .btn-end:hover { background: var(--danger); }
+        .btn-ghost   { background: var(--card); color: var(--text-dim); border: 1px solid var(--border); }
+        .btn-row { display: flex; gap: 0.5rem; margin-top: 1rem; }
+        .btn-row .btn { margin-top: 0; }
+
+        /* ================================================================
+           SETUP SCREEN
+        ================================================================ */
+        .setup { text-align: center; padding: 2rem 0 1rem; }
+        .setup-icon { font-size: 4rem; line-height: 1; margin-bottom: 0.75rem; }
+        .setup-h1 { font-size: 2.2rem; font-weight: 900; color: var(--gold); letter-spacing: 2px; text-transform: uppercase; line-height: 1.1; }
+        .setup-tagline { color: var(--text-dim); margin: 0.75rem 0 1.75rem; font-size: 1rem; line-height: 1.6; }
+        .setup-tagline strong { color: var(--text); }
+        .setup-players { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.5rem 1rem; text-align: left; margin-bottom: 1.5rem; }
+        .setup-player { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0; border-bottom: 1px solid var(--border); }
+        .setup-player:last-child { border-bottom: none; }
+        .setup-num  { color: var(--text-dim); font-size: 0.8rem; width: 1.4rem; text-align: right; flex-shrink: 0; }
+        .setup-name { font-weight: 600; font-size: 1rem; }
+        .setup-warning { background: #2a1800; border: 1px solid var(--warning); border-radius: 10px; padding: 0.75rem 1rem; font-size: 0.85rem; color: var(--warning); margin-bottom: 1rem; line-height: 1.5; }
+
+        /* ================================================================
+           STANDINGS LIST
+        ================================================================ */
+        .standings { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 0.5rem 0.85rem; margin: 0.75rem 0; }
+        .st-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
+        .st-item:last-child { border-bottom: none; }
+        .st-rank  { width: 1.5rem; font-size: 0.75rem; color: var(--text-dim); }
+        .st-icon  { width: 1.2rem; text-align: center; font-size: 0.9rem; }
+        .st-name  { flex: 1; font-weight: 600; font-size: 0.95rem; }
+        .st-diff  { font-size: 0.75rem; min-width: 2.5rem; text-align: right; }
+        .st-diff.pos { color: var(--safe); }
+        .st-diff.neg { color: var(--danger); }
+        .st-diff.zer { color: var(--text-dim); }
+        .st-loss  { font-weight: 800; font-size: 1rem; min-width: 2.5rem; text-align: right; }
+        .st-item.shame .st-name { color: #ff6666; }
+        .st-item.shame .st-loss { color: var(--danger); }
+        .st-item.warn  .st-name { color: var(--warning); }
+        .st-item.warn  .st-loss { color: var(--warning); }
+        .st-item.safe  .st-loss { color: var(--text-dim); }
+
+        /* ================================================================
+           BETWEEN ROUNDS
+        ================================================================ */
+        .between-h { font-size: 1.3rem; font-weight: 800; color: var(--gold); text-align: center; }
+        .round-summary { background: var(--card); border-radius: 10px; padding: 0.6rem 0.85rem; margin-bottom: 0.75rem; }
+        .rs-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); margin-bottom: 0.4rem; }
+        .rs-item { font-size: 0.85rem; padding: 0.2rem 0; color: var(--text-dim); }
+        .rs-item .win  { color: var(--safe);   font-weight: 600; }
+        .rs-item .lose { color: var(--danger); font-weight: 600; }
+        .rs-item .sc   { color: var(--text-dim); font-size: 0.8rem; }
+
+        /* ================================================================
+           FINISHED — DRAMATIC REVEAL
+        ================================================================ */
+        .finished { text-align: center; padding: 1rem 0; }
+        .fin-pre { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 3px; color: var(--text-dim); margin-bottom: 0.5rem; }
+        .fin-headline { font-size: 2rem; font-weight: 900; color: #ff3333; text-transform: uppercase; letter-spacing: 3px; }
+        .fin-sub { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 1.5rem; margin-top: 0.25rem; }
+        .mystery-card { border: 2px dashed #444; border-radius: 16px; padding: 1.5rem 1rem; margin-bottom: 0.75rem; cursor: pointer; background: var(--card); user-select: none; }
+        .mystery-card:active { transform: scale(0.97); }
+        .mystery-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; color: var(--text-dim); margin-bottom: 0.5rem; }
+        .mystery-icon { font-size: 2rem; display: block; margin-bottom: 0.3rem; }
+        .mystery-tap  { font-size: 0.8rem; color: #555; }
+        .shame-card { background: linear-gradient(135deg, #3b0000, #1a0000); border: 2px solid #ff2222; border-radius: 16px; padding: 1.25rem 1rem; margin-bottom: 0.75rem; }
+        .shame-card.reveal-anim { animation: reveal-pop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes reveal-pop { 0%{transform:scale(0.75) translateY(20px);opacity:0} 70%{transform:scale(1.04)} 100%{transform:scale(1) translateY(0);opacity:1} }
+        .shame-card.glow { animation: sc-glow 1.5s ease-in-out infinite; }
+        @keyframes sc-glow { 0%,100%{box-shadow:0 0 15px rgba(255,30,30,0.4)} 50%{box-shadow:0 0 35px rgba(255,30,30,0.8)} }
+        .sc-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; color: #ff9999; margin-bottom: 0.3rem; }
+        .sc-name  { font-size: 2.4rem; font-weight: 900; color: white; line-height: 1.1; }
+        .sc-stat  { font-size: 0.85rem; color: #ffaaaa; margin-top: 0.3rem; }
+        .tiebreak-note { background: #2a1800; border: 1px solid var(--warning); border-radius: 10px; padding: 0.75rem; color: var(--warning); font-size: 0.85rem; margin-top: 0.5rem; text-align: left; }
+        .safe-block { background: #071507; border: 1px solid #2a402a; border-radius: 12px; padding: 0.85rem; margin-top: 1.25rem; }
+        .safe-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 2px; color: var(--safe); margin-bottom: 0.6rem; }
+        .safe-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: center; }
+        .safe-chip { background: #0d2a0d; border: 1px solid #2a5a2a; border-radius: 20px; padding: 0.25rem 0.65rem; font-size: 0.85rem; color: #bbe8bb; }
+        .safe-chip .lc { color: var(--text-dim); font-size: 0.75rem; }
+    </style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+// ================================================================
+//  DATA
+// ================================================================
+const PLAYERS = [
+    'Rytter','Linnet','Jones','Martin','Dan',
+    'Bo','Mikkel','Marco','John','Alexander'
+];
+const WIN_SCORE = 21; // Antaget vinder-score
+
+// ================================================================
+//  STATE
+// ================================================================
+let state = {
+    phase: 'setup',   // setup | playing | between | finished
+    round: 0,
+    losses: initLosses(),  // bruges til Swiss-parring
+    matches: [],           // [{p1,p2,winner,loserScore,confirmed}]
+    history: [],           // array af færdige runde-arrays
+    played: new Set(),
+};
+let revealStep = 0;
+
+function initLosses() {
+    return Object.fromEntries(PLAYERS.map(p => [p, 0]));
+}
+
+// ================================================================
+//  STATS — beregner wins/losses/diff fra bekræftede kampe
+// ================================================================
+function computeStats() {
+    const s = Object.fromEntries(PLAYERS.map(p => [p, { w:0, l:0, diff:0 }]));
+    const all = [...state.history.flat(), ...state.matches.filter(m => m.confirmed)];
+    for (const m of all) {
+        if (!m.winner) continue;
+        const loser = m.winner === m.p1 ? m.p2 : m.p1;
+        const gap = WIN_SCORE - (m.loserScore || 0);
+        s[m.winner].w++;
+        s[m.winner].diff += gap;
+        s[loser].l++;
+        s[loser].diff -= gap;
+    }
+    return s;
+}
+
+function sortedByStandings() {
+    const stats = computeStats();
+    return [...PLAYERS].sort((a, b) => {
+        // Flest tab = værst (stigende)
+        const ld = stats[b].l - stats[a].l;
+        if (ld !== 0) return ld;
+        // Samme tab: dårligst point-difference = mere skam
+        return stats[a].diff - stats[b].diff;
+    });
+}
+
+// ================================================================
+//  PAIRING
+// ================================================================
+function pairKey(a, b) { return [a,b].sort().join('||'); }
+
+function shuffle(arr) {
+    const a = [...arr];
+    for (let i = a.length-1; i > 0; i--) {
+        const j = Math.floor(Math.random()*(i+1));
+        [a[i],a[j]] = [a[j],a[i]];
+    }
+    return a;
+}
+
+function drawMatches() {
+    const groups = {};
+    for (const p of PLAYERS) {
+        const l = state.losses[p];
+        if (!groups[l]) groups[l] = [];
+        groups[l].push(p);
+    }
+    const levels = Object.keys(groups).map(Number).sort((a,b) => b-a);
+
+    for (let attempt = 0; attempt < 300; attempt++) {
+        const ordered = levels.flatMap(l => shuffle(groups[l]));
+        const pairs = []; let ok = true;
+        for (let i = 0; i < ordered.length; i += 2) {
+            if (state.played.has(pairKey(ordered[i], ordered[i+1]))) { ok=false; break; }
+            pairs.push({ p1:ordered[i], p2:ordered[i+1], winner:null, loserScore:0, confirmed:false });
+        }
+        if (ok) return pairs;
+    }
+    const r = shuffle(PLAYERS);
+    return Array.from({length:5}, (_,i) => ({
+        p1:r[i*2], p2:r[i*2+1], winner:null, loserScore:0, confirmed:false
+    }));
+}
+
+// ================================================================
+//  ACTIONS
+// ================================================================
+function startTournament() {
+    state.phase = 'playing';
+    state.round = 1;
+    state.matches = drawMatches();
+    render();
+}
+
+// Trin 1: vælg vinder → viser score-entry
+function pickWinner(idx, winner) {
+    const m = state.matches[idx];
+    if (m.confirmed) return;
+    m.winner = winner;
+    m.loserScore = 0;
+    vibrate([30]);
+    render();
+}
+
+// Annuller valg af vinder (gå tilbage til trin 1)
+function cancelWinner(idx) {
+    const m = state.matches[idx];
+    if (m.confirmed) return;
+    m.winner = null;
+    m.loserScore = 0;
+    render();
+}
+
+// Justér taberens score
+function adjustScore(idx, delta) {
+    const m = state.matches[idx];
+    if (m.confirmed) return;
+    m.loserScore = Math.max(0, Math.min(WIN_SCORE - 1, m.loserScore + delta));
+    // Opdater kun tallet for hurtigere respons
+    const el = document.getElementById(`score-num-${idx}`);
+    if (el) el.textContent = m.loserScore;
+}
+
+// Trin 2: bekræft resultatet
+function confirmMatch(idx) {
+    const m = state.matches[idx];
+    if (!m.winner || m.confirmed) return;
+    m.confirmed = true;
+
+    const loser = m.winner === m.p1 ? m.p2 : m.p1;
+    state.losses[loser]++;
+    state.played.add(pairKey(m.p1, m.p2));
+
+    vibrate([50, 30, 50]);
+
+    if (state.matches.every(x => x.confirmed)) {
+        state.history.push([...state.matches]);
+        state.phase = 'between';
+    }
+    render();
+}
+
+// Fortryd bekræftet kamp
+function undoMatch(idx) {
+    const m = state.matches[idx];
+    if (!m.confirmed) {
+        // Kun i venter-tilstand: annuller vinder-valg
+        cancelWinner(idx); return;
+    }
+    const loser = m.winner === m.p1 ? m.p2 : m.p1;
+    state.losses[loser]--;
+    state.played.delete(pairKey(m.p1, m.p2));
+    m.winner = null; m.loserScore = 0; m.confirmed = false;
+    if (state.phase === 'between') { state.history.pop(); state.phase = 'playing'; }
+    render();
+}
+
+function nextRound() {
+    state.round++;
+    state.matches = drawMatches();
+    state.phase = 'playing';
+    render();
+}
+
+function endTournament() {
+    revealStep = 0;
+    state.phase = 'finished';
+    render();
+}
+
+function revealNext() {
+    revealStep++;
+    vibrate(revealStep === 1 ? [60,40,60] : [100,60,100,60,300]);
+    document.getElementById('app').innerHTML = renderFinished();
+}
+
+function restart() {
+    state = { phase:'setup', round:0, losses:initLosses(), matches:[], history:[], played:new Set() };
+    revealStep = 0;
+    render();
+}
+
+function vibrate(p) { try { navigator.vibrate && navigator.vibrate(p); } catch(e){} }
+
+// ================================================================
+//  RISK HELPERS
+// ================================================================
+function riskClass(player) {
+    const sorted = sortedByStandings();
+    const idx = sorted.indexOf(player);
+    const stats = computeStats();
+    const l = stats[player].l;
+    if (l === 0) return 'safe';
+    const cutoffL = stats[sorted[1]].l;
+    if (stats[player].l > cutoffL)               return 'shame';
+    if (stats[player].l === cutoffL && idx <= 1)  return 'shame';
+    if (stats[player].l === cutoffL)              return 'dngr';
+    return 'warn';
+}
+
+const RISK_ICON  = { safe:'✅', warn:'😬', dngr:'⚠️', shame:'🔥' };
+const RISK_LABEL = { safe:'Tryg', warn:'Fare', dngr:'Fare!', shame:'SKAM' };
+
+function diffStr(d) {
+    if (d > 0) return `+${d}`;
+    if (d < 0) return `${d}`;
+    return '±0';
+}
+function diffCls(d) { return d > 0 ? 'pos' : d < 0 ? 'neg' : 'zer'; }
+
+// ================================================================
+//  RENDER COMPONENTS
+// ================================================================
+
+function renderShameBoard() {
+    const sorted = sortedByStandings();
+    const stats  = computeStats();
+    const anyLosses = sorted.some(p => stats[p].l > 0);
+    return `
+    <div class="shame-board">
+        <div class="shame-board-title">Skamtavlen — tab / +point</div>
+        <div class="shame-grid">
+            ${sorted.map(p => {
+                const cls  = riskClass(p);
+                const icon = RISK_ICON[cls];
+                const st   = stats[p];
+                const ds   = diffStr(st.diff);
+                const dc   = diffCls(st.diff);
+                return `<div class="sp ${cls}">
+                    <span class="sp-icon">${icon}</span>
+                    <span class="sp-name">${p}</span>
+                    <div class="sp-stats">
+                        <span class="sp-loss">${st.l} tab</span>
+                        ${anyLosses ? `<span class="sp-diff ${dc}">${ds}</span>` : ''}
+                    </div>
+                </div>`;
+            }).join('')}
+        </div>
+    </div>`;
+}
+
+function renderMatch(m, idx) {
+    const stats  = computeStats();
+    const r1     = riskClass(m.p1);
+    const r2     = riskClass(m.p2);
+    const hs     = !m.winner && stats[m.p1].l > 0 && stats[m.p2].l > 0;
+    const loser  = m.winner ? (m.winner === m.p1 ? m.p2 : m.p1) : null;
+    const isPending = m.winner && !m.confirmed;
+
+    // ---- State A: ingen vinder endnu ----
+    if (!m.winner) return `
+    <div class="match-card ${hs ? 'high-stakes' : ''}">
+        <div class="match-meta">
+            <span class="match-num">Kamp ${idx+1}</span>
+            ${hs ? `<span class="high-stakes-badge">⚡ Højrisiko</span>` : ''}
+        </div>
+        <div class="match-row">
+            <button class="pb" onclick="pickWinner(${idx},'${m.p1}')">
+                ${m.p1}
+                <span class="pb-risk ${r1}">${RISK_ICON[r1]} ${RISK_LABEL[r1]}</span>
+            </button>
+            <div class="vs">VS</div>
+            <button class="pb" onclick="pickWinner(${idx},'${m.p2}')">
+                ${m.p2}
+                <span class="pb-risk ${r2}">${RISK_ICON[r2]} ${RISK_LABEL[r2]}</span>
+            </button>
+        </div>
+        <div class="match-hint">Tryk på vinderen</div>
+    </div>`;
+
+    // ---- State B: vinder valgt, afventer score ----
+    if (isPending) return `
+    <div class="match-card pending">
+        <div class="match-meta">
+            <span class="match-num">Kamp ${idx+1}</span>
+        </div>
+        <div class="match-row">
+            <button class="pb pending-win" disabled>${m.winner}<br><span style="font-size:0.7rem">🏆 Vinder</span></button>
+            <div class="vs">VS</div>
+            <button class="pb pending-lose" disabled>${loser}<br><span style="font-size:0.7rem">😬 Taber</span></button>
+        </div>
+        <div class="score-entry">
+            <div class="score-entry-title">Hvad scorede <strong>${loser}</strong>?</div>
+            <div class="score-row">
+                <button class="score-btn" onclick="adjustScore(${idx},-1)">−</button>
+                <div class="score-num" id="score-num-${idx}">${m.loserScore}</div>
+                <button class="score-btn" onclick="adjustScore(${idx},+1)">+</button>
+            </div>
+            <div class="score-actions">
+                <button class="btn-back-small" onclick="cancelWinner(${idx})">← Skift</button>
+                <button class="btn-confirm" onclick="confirmMatch(${idx})">Bekræft ✓</button>
+            </div>
+        </div>
+    </div>`;
+
+    // ---- State C: bekræftet ----
+    const gap = WIN_SCORE - m.loserScore;
+    return `
+    <div class="match-card done">
+        <div class="match-meta">
+            <span class="match-num">Kamp ${idx+1}</span>
+            <button class="undo-btn" onclick="undoMatch(${idx})">↩ Fortryd</button>
+        </div>
+        <div class="match-row">
+            <button class="pb winner" disabled>
+                ${m.winner}
+                <span class="pb-result">🏆 ${WIN_SCORE} point</span>
+            </button>
+            <div class="vs">${WIN_SCORE}-${m.loserScore}</div>
+            <button class="pb loser" disabled>
+                ${loser}
+                <span class="pb-result">😱 ${m.loserScore} point</span>
+            </button>
+        </div>
+    </div>`;
+}
+
+function renderStandings() {
+    const sorted = sortedByStandings();
+    const stats  = computeStats();
+    const icons  = ['🔥','😱','⚠️','😬','😅','✅','✅','✅','✅','✅'];
+    return `
+    <div class="standings">
+        ${sorted.map((p, i) => {
+            const st  = stats[p];
+            const cls = st.l === 0 ? 'safe' : (i <= 1 ? 'shame' : (i <= 3 ? 'warn' : 'safe'));
+            const ds  = diffStr(st.diff);
+            const dc  = diffCls(st.diff);
+            return `<div class="st-item ${cls}">
+                <span class="st-rank">${i+1}.</span>
+                <span class="st-icon">${icons[i]||'✅'}</span>
+                <span class="st-name">${p}</span>
+                <span class="st-diff ${dc}">${ds}</span>
+                <span class="st-loss">${st.l} tab</span>
+            </div>`;
+        }).join('')}
+    </div>`;
+}
+
+// ================================================================
+//  SCREENS
+// ================================================================
+
+function renderSetup() {
+    return `
+    <div class="container">
+        <div class="setup">
+            <div class="setup-icon">🎯</div>
+            <div class="setup-h1">Cornhole<br>Skam-Cup</div>
+            <p class="setup-tagline">
+                Det handler <strong>ikke om at vinde</strong>.<br>
+                Det handler om <strong>ikke at tabe</strong>.<br>
+                De 2 største tabere får konsekvenser!
+            </p>
+            <div class="setup-players">
+                ${PLAYERS.map((p,i) => `
+                    <div class="setup-player">
+                        <span class="setup-num">${i+1}.</span>
+                        <span class="setup-name">${p}</span>
+                    </div>`).join('')}
+            </div>
+            <div class="setup-warning">
+                ⚠️ <strong>Reglerne:</strong> Spil runder. Indskriv resultater.
+                Rang afgøres af <em>tab</em> — og ved uafgjort: <em>point-difference</em>.
+                De 2 i bunden lider konsekvenserne.
+            </div>
+            <button class="btn btn-primary" onclick="startTournament()">🎯 Start Turneringen</button>
+        </div>
+    </div>`;
+}
+
+function renderPlaying() {
+    const done  = state.matches.filter(m => m.confirmed).length;
+    const total = state.matches.length;
+    const pct   = Math.round((done/total)*100);
+    const stats = computeStats();
+    const topL  = Math.max(...PLAYERS.map(p => stats[p].l));
+    return `
+    <header>
+        <span class="header-title">🎯 Skam-Cup</span>
+        <span class="round-pill ${topL >= 2 ? 'danger-pill' : ''}">Runde ${state.round}</span>
+    </header>
+    <div class="container">
+        ${renderShameBoard()}
+        <div class="section-label">Kampe — ${done}/${total} færdige</div>
+        <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
+        ${state.matches.map((m,i) => renderMatch(m,i)).join('')}
+    </div>`;
+}
+
+function renderBetween() {
+    const last = state.history[state.history.length-1];
+    return `
+    <header>
+        <span class="header-title">🎯 Skam-Cup</span>
+        <span class="round-pill">Runde ${state.round} ✓</span>
+    </header>
+    <div class="container">
+        <div style="margin: 0.5rem 0 1rem; text-align:center">
+            <div class="between-h">Runde ${state.round} er slut!</div>
+        </div>
+        <div class="round-summary">
+            <div class="rs-title">Resultater fra runde ${state.round}</div>
+            ${last.map(m => {
+                const loser = m.winner === m.p1 ? m.p2 : m.p1;
+                return `<div class="rs-item">
+                    <span class="win">${m.winner}</span> slog <span class="lose">${loser}</span>
+                    <span class="sc">${WIN_SCORE}–${m.loserScore}</span>
+                </div>`;
+            }).join('')}
+        </div>
+        ${renderShameBoard()}
+        <div class="section-label">Samlet stilling</div>
+        ${renderStandings()}
+        <div class="btn-row">
+            <button class="btn btn-primary" onclick="nextRound()" style="flex:1.3">Næste Runde →</button>
+            <button class="btn btn-end" onclick="endTournament()" style="flex:1">Afslut! 🔥</button>
+        </div>
+        <div style="text-align:center;font-size:0.7rem;color:var(--text-dim);margin-top:0.5rem">
+            "Afslut" → dramatisk afsløring af de 2 tabere
+        </div>
+    </div>`;
+}
+
+function renderFinished() {
+    const sorted = sortedByStandings();
+    const stats  = computeStats();
+    const hasL   = stats[sorted[0]].l > 0;
+    const tied   = stats[sorted[1]].l === stats[sorted[2]].l && stats[sorted[1]].l > 0
+                   && stats[sorted[1]].diff === stats[sorted[2]].diff;
+    const safe   = sorted.slice(2);
+
+    function mystery(place, fn, lbl) {
+        return `<div class="mystery-card" onclick="${fn}()">
+            <div class="mystery-label">${lbl}</div>
+            <span class="mystery-icon">❓</span>
+            <div class="mystery-tap">Tryk for at afsløre...</div>
+        </div>`;
+    }
+    function shameCard(p, place, anim) {
+        const st  = stats[p];
+        const ds  = diffStr(st.diff);
+        const lbl = place === 1 ? '😱 Største Taber — 1. plads i skam 😱' : '😰 Næststørste Taber — 2. plads i skam';
+        return `<div class="shame-card ${anim?'reveal-anim':''} glow">
+            <div class="sc-label">${lbl}</div>
+            <div class="sc-name">${p}</div>
+            <div class="sc-stat">${st.l} tab · ${ds} point</div>
+        </div>`;
+    }
+
+    let cards = '';
+    if (!hasL) {
+        cards = `<p style="color:var(--text-dim);margin:2rem 0">Ingen tab endnu...</p>`;
+    } else {
+        const c2 = revealStep >= 1 ? shameCard(sorted[1], 2, revealStep===1) : mystery(2,'revealNext','2. plads i skam');
+        const c1 = revealStep >= 2 ? shameCard(sorted[0], 1, revealStep===2) : (revealStep >= 1 ? mystery(1,'revealNext','1. plads i skam') : '');
+        const tie = (tied && revealStep >= 2) ? `<div class="tiebreak-note">⚠️ <strong>Uafgjort!</strong> Afgør det med et omspil!</div>` : '';
+        cards = `<div class="shame-cards">${c2}${c1}${tie}</div>`;
+    }
+
+    return `
+    <header>
+        <span class="header-title">🎯 Skam-Cup</span>
+        <span class="round-pill danger-pill">FINAL</span>
+    </header>
+    <div class="container">
+        <div class="finished">
+            <div class="fin-pre">Efter ${state.round} runder</div>
+            <div class="fin-headline">SKAM OVER...</div>
+            <div class="fin-sub">Dommen er faldet. Taberne afsløres.</div>
+            ${cards}
+            ${revealStep >= 2 ? `
+            <div class="safe-block">
+                <div class="safe-title">✅ Slap heldigt — denne gang</div>
+                <div class="safe-chips">
+                    ${safe.map(p => `<span class="safe-chip">${p} <span class="lc">(${stats[p].l} tab)</span></span>`).join('')}
+                </div>
+            </div>
+            <div style="margin-top:1.5rem">${renderStandings()}</div>
+            <button class="btn btn-ghost" onclick="restart()" style="margin-top:1rem">🔄 Spil igen</button>
+            ` : ''}
+        </div>
+    </div>`;
+}
+
+// ================================================================
+//  MASTER RENDER
+// ================================================================
+function render() {
+    const app = document.getElementById('app');
+    switch (state.phase) {
+        case 'setup':    app.innerHTML = renderSetup();    break;
+        case 'playing':  app.innerHTML = renderPlaying();  break;
+        case 'between':  app.innerHTML = renderBetween();  break;
+        case 'finished': app.innerHTML = renderFinished(); break;
+    }
+    window.scrollTo(0,0);
+}
+
+render();
+</script>
+</body>
+</html>
