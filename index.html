@@ -744,15 +744,21 @@ function renderFinished() {
 // ================================================================
 //  MASTER RENDER
 // ================================================================
+let prevPhase = null;
+
 function render() {
     const app = document.getElementById('app');
+    const phaseChanged = state.phase !== prevPhase;
+    prevPhase = state.phase;
+
     switch (state.phase) {
         case 'setup':    app.innerHTML = renderSetup();    break;
         case 'playing':  app.innerHTML = renderPlaying();  break;
         case 'between':  app.innerHTML = renderBetween();  break;
         case 'finished': app.innerHTML = renderFinished(); break;
     }
-    window.scrollTo(0,0);
+
+    if (phaseChanged) window.scrollTo(0, 0);
 }
 
 render();
