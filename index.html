@@ -314,7 +314,11 @@ function escJs(s) {
 // ================================================================
 function computeStats() {
     const s = Object.fromEntries(state.players.map(p => [p, { w:0, l:0, diff:0 }]));
-    const all = [...state.history.flatMap(r => r.matches), ...state.matches.filter(m => m.confirmed)];
+    // state.matches bliver først "afløst" af en ny runde, når nextRound() kaldes —
+    // så snart runden er skubbet til history (fase 'between'/'finished'), må den
+    // ikke også tælles her, ellers dobbelttælles den lige-afsluttede runde.
+    const currentRoundMatches = state.phase === 'playing' ? state.matches.filter(m => m.confirmed) : [];
+    const all = [...state.history.flatMap(r => r.matches), ...currentRoundMatches];
     for (const m of all) {
         if (!m.winner) continue;
         const loser = m.winner === m.p1 ? m.p2 : m.p1;
