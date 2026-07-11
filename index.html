@@ -229,7 +229,7 @@
         .between-h { font-size: 1.3rem; font-weight: 800; color: var(--gold); text-align: center; }
         .round-summary { background: var(--card); border-radius: 10px; padding: 0.6rem 0.85rem; margin-bottom: 0.75rem; }
         .rs-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); margin-bottom: 0.4rem; }
-        .rs-item { font-size: 0.85rem; padding: 0.2rem 0; color: var(--text-dim); }
+        .rs-item { font-size: 0.85rem; padding: 0.2rem 0; color: var(--text-dim); display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
         .rs-item .win  { color: var(--safe);   font-weight: 600; }
         .rs-item .lose { color: var(--danger); font-weight: 600; }
         .rs-item .sc   { color: var(--text-dim); font-size: 0.8rem; }
@@ -287,6 +287,35 @@ let state = {
     setupMsg: '',
 };
 let revealStep = 0;
+let tournamentStart = null; // Date.now() ved runde 1 — bruges til forløbet-tid
+
+// ================================================================
+//  PERSISTENCE — auto-gem til localStorage, så en skærmlås eller
+//  et uheld med genindlæsning ikke sletter hele turneringen.
+// ================================================================
+const STORAGE_KEY = 'cornholeSkamCup_v1';
+
+function saveState() {
+    try {
+        const payload = {
+            state: { ...state, played: [...state.played] },
+            revealStep,
+            tournamentStart,
+        };
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch (e) {}
+}
+
+function loadState() {
+    try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+}
+
+function clearSavedState() {
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+}
 
 // ================================================================
 //  ESCAPING — spillernavne er nu fri tekst, så vi undgår at
@@ -445,6 +474,7 @@ function startTournament() {
     state.phase = 'playing';
     state.round = 1;
     state.matches = drawMatches();
+    tournamentStart = Date.now();
     render();
 }
 
@@ -517,8 +547,16 @@ function nextRound() {
 }
 
 function endTournament() {
+    if (!confirm('Er du sikker på du vil afslutte? I kan ikke spille flere runder bagefter.')) return;
     revealStep = 0;
     state.phase = 'finished';
+    render();
+}
+
+// Kun muligt før første afsløring — giver et sikkerhedsnet mod et fedttot-tryk på "Afslut!"
+function backToBetween() {
+    if (revealStep > 0) return;
+    state.phase = 'between';
     render();
 }
 
@@ -526,12 +564,14 @@ function revealNext() {
     revealStep++;
     vibrate(revealStep === 1 ? [60,40,60] : [100,60,100,60,300]);
     document.getElementById('app').innerHTML = renderFinished();
+    saveState();
 }
 
 function restart() {
     const keepPlayers = [...state.players];
     state = { phase:'setup', round:0, players:keepPlayers, losses:{}, byes:{}, currentBye:null, matches:[], history:[], played:new Set(), setupMsg:'' };
     revealStep = 0;
+    tournamentStart = null;
     render();
 }
 
@@ -562,6 +602,27 @@ function diffStr(d) {
     return '±0';
 }
 function diffCls(d) { return d > 0 ? 'pos' : d < 0 ? 'neg' : 'zer'; }
+
+// Antal kolonner i score-gitteret — vælg et pænt antal der går op i
+// WIN_SCORE, så der ikke står en enlig knap alene på sidste række.
+function scoreGridCols(n) {
+    for (const c of [5, 6, 7, 4, 8]) { if (n % c === 0) return c; }
+    return 5;
+}
+
+function formatElapsed(ms) {
+    const totalSec = Math.max(0, Math.floor(ms / 1000));
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+function updateTimerDisplay() {
+    const el = document.getElementById('elapsed-timer');
+    if (!el || !tournamentStart) return;
+    el.textContent = formatElapsed(Date.now() - tournamentStart);
+}
+setInterval(updateTimerDisplay, 1000);
 
 // ================================================================
 //  RENDER COMPONENTS
@@ -636,7 +697,7 @@ function renderMatch(m, idx) {
         </div>
         <div class="score-entry">
             <div class="score-entry-title">Hvad scorede <strong>${esc(loser)}</strong>? Tryk på tallet:</div>
-            <div class="score-grid">
+            <div class="score-grid" style="grid-template-columns: repeat(${scoreGridCols(WIN_SCORE)}, 1fr)">
                 ${Array.from({length: WIN_SCORE}, (_,i) => `<button class="score-pick" onclick="selectLoserScore(${idx},${i})">${i}</button>`).join('')}
             </div>
             <button class="btn-back-small" onclick="cancelWinner(${idx})">← Skift vinder</button>
@@ -747,7 +808,7 @@ function renderPlaying() {
     return `
     <header>
         <span class="header-title">🎯 Skam-Cup</span>
-        <span class="round-pill ${topL >= 2 ? 'danger-pill' : ''}">Runde ${state.round}</span>
+        <span class="round-pill ${topL >= 2 ? 'danger-pill' : ''}">Runde ${state.round} · <span id="elapsed-timer">0:00</span></span>
     </header>
     <div class="container">
         ${state.currentBye ? `<div class="bye-badge">🪑 <strong>${esc(state.currentBye)}</strong> sidder over denne runde</div>` : ''}
@@ -763,7 +824,7 @@ function renderBetween() {
     return `
     <header>
         <span class="header-title">🎯 Skam-Cup</span>
-        <span class="round-pill">Runde ${state.round} ✓</span>
+        <span class="round-pill">Runde ${state.round} ✓ · <span id="elapsed-timer">0:00</span></span>
     </header>
     <div class="container">
         <div style="margin: 0.5rem 0 1rem; text-align:center">
@@ -771,11 +832,12 @@ function renderBetween() {
         </div>
         <div class="round-summary">
             <div class="rs-title">Resultater fra runde ${state.round}</div>
-            ${last.matches.map(m => {
+            ${last.matches.map((m, i) => {
                 const loser = m.winner === m.p1 ? m.p2 : m.p1;
                 return `<div class="rs-item">
-                    <span class="win">${esc(m.winner)}</span> slog <span class="lose">${esc(loser)}</span>
-                    <span class="sc">${WIN_SCORE}–${m.loserScore}</span>
+                    <span><span class="win">${esc(m.winner)}</span> slog <span class="lose">${esc(loser)}</span>
+                    <span class="sc">${WIN_SCORE}–${m.loserScore}</span></span>
+                    <button class="undo-btn" onclick="undoMatch(${i})">↩ Fortryd</button>
                 </div>`;
             }).join('')}
             ${last.bye ? `<div class="rs-item">🪑 <span style="color:var(--text-dim)">${esc(last.bye)} sad over</span></div>` : ''}
@@ -797,8 +859,12 @@ function renderFinished() {
     const sorted = sortedByStandings();
     const stats  = computeStats();
     const hasL   = stats[sorted[0]].l > 0;
-    const tied   = stats[sorted[1]].l === stats[sorted[2]].l && stats[sorted[1]].l > 0
-                   && stats[sorted[1]].diff === stats[sorted[2]].diff;
+    // Uafgjort om selve 1.-pladsen i skam (den vigtigste af de to at fange!)
+    const tiedForWorst  = stats[sorted[0]].l === stats[sorted[1]].l
+                          && stats[sorted[0]].diff === stats[sorted[1]].diff;
+    // Uafgjort om cutoff mellem 2. plads i skam og den bedst placerede "sluppet fri"
+    const tiedForCutoff = stats[sorted[1]].l === stats[sorted[2]].l && stats[sorted[1]].l > 0
+                          && stats[sorted[1]].diff === stats[sorted[2]].diff;
     const safe   = sorted.slice(2);
 
     function mystery(place, fn, lbl) {
@@ -825,17 +891,23 @@ function renderFinished() {
     } else {
         const c2 = revealStep >= 1 ? shameCard(sorted[1], 2, revealStep===1) : mystery(2,'revealNext','2. plads i skam');
         const c1 = revealStep >= 2 ? shameCard(sorted[0], 1, revealStep===2) : (revealStep >= 1 ? mystery(1,'revealNext','1. plads i skam') : '');
-        const tie = (tied && revealStep >= 2) ? `<div class="tiebreak-note">⚠️ <strong>Uafgjort!</strong> Afgør det med et omspil!</div>` : '';
+        let tie = '';
+        if (revealStep >= 2 && tiedForWorst) {
+            tie = `<div class="tiebreak-note">⚠️ <strong>Uafgjort om 1. pladsen i skam!</strong> ${esc(sorted[0])} og ${esc(sorted[1])} står helt lige — afgør det med et omspil!</div>`;
+        } else if (revealStep >= 2 && tiedForCutoff) {
+            tie = `<div class="tiebreak-note">⚠️ <strong>Uafgjort om 2. pladsen i skam!</strong> Afgør det med et omspil!</div>`;
+        }
         cards = `<div class="shame-cards">${c2}${c1}${tie}</div>`;
     }
 
     return `
     <header>
         <span class="header-title">🎯 Skam-Cup</span>
-        <span class="round-pill danger-pill">FINAL</span>
+        <span class="round-pill danger-pill">FINAL · <span id="elapsed-timer">0:00</span></span>
     </header>
     <div class="container">
         <div class="finished">
+            ${revealStep === 0 ? `<button class="btn btn-ghost" onclick="backToBetween()" style="margin-bottom:1.25rem">← Tilbage, jeg trykkede forkert</button>` : ''}
             <div class="fin-pre">Efter ${state.round} runder</div>
             <div class="fin-headline">SKAM OVER...</div>
             <div class="fin-sub">Dommen er faldet. Taberne afsløres.</div>
@@ -872,9 +944,65 @@ function render() {
     }
 
     if (phaseChanged) window.scrollTo(0, 0);
+    updateTimerDisplay();
+    saveState();
 }
 
-render();
+// ================================================================
+//  BOOT — genoptag en gemt turnering hvis der er en, ellers frisk start
+// ================================================================
+let resumeData = null;
+
+function renderResumePrompt() {
+    const st = resumeData.state;
+    const n  = (st.players || []).length;
+    const phaseLabel = { playing: `runde ${st.round}`, between: `mellem runde ${st.round}` }[st.phase] || st.phase;
+    document.getElementById('app').innerHTML = `
+    <div class="container">
+        <div class="setup">
+            <div class="setup-icon">🔄</div>
+            <div class="setup-h1" style="font-size:1.7rem">Fortsæt turnering?</div>
+            <p class="setup-tagline">Der ligger en gemt turnering med <strong>${n} spillere</strong> i gang (${esc(phaseLabel)}).</p>
+            <button class="btn btn-primary" onclick="resumeSaved()">▶ Fortsæt hvor vi slap</button>
+            <button class="btn btn-ghost" onclick="discardSaved()" style="margin-top:0.6rem">🗑 Start forfra</button>
+        </div>
+    </div>`;
+}
+
+function resumeSaved() {
+    const saved = resumeData;
+    state = { ...saved.state, played: new Set(saved.state.played || []) };
+    revealStep = saved.revealStep || 0;
+    tournamentStart = saved.tournamentStart || null;
+    resumeData = null;
+    render();
+}
+
+function discardSaved() {
+    clearSavedState();
+    state = { phase:'setup', round:0, players:[], losses:{}, byes:{}, currentBye:null, matches:[], history:[], played:new Set(), setupMsg:'' };
+    revealStep = 0;
+    tournamentStart = null;
+    resumeData = null;
+    render();
+}
+
+function boot() {
+    const saved = loadState();
+    if (saved && saved.state && (saved.state.phase === 'playing' || saved.state.phase === 'between')) {
+        resumeData = saved;
+        renderResumePrompt();
+        return;
+    }
+    if (saved && saved.state) {
+        state = { ...saved.state, played: new Set(saved.state.played || []) };
+        revealStep = saved.revealStep || 0;
+        tournamentStart = saved.tournamentStart || null;
+    }
+    render();
+}
+
+boot();
 </script>
 </body>
 </html>
