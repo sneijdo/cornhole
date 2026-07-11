@@ -188,8 +188,20 @@
         .setup-player { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0; border-bottom: 1px solid var(--border); }
         .setup-player:last-child { border-bottom: none; }
         .setup-num  { color: var(--text-dim); font-size: 0.8rem; width: 1.4rem; text-align: right; flex-shrink: 0; }
-        .setup-name { font-weight: 600; font-size: 1rem; }
+        .setup-name { font-weight: 600; font-size: 1rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .setup-empty { color: var(--text-dim); font-size: 0.9rem; padding: 1rem 0; text-align: center; }
         .setup-warning { background: #2a1800; border: 1px solid var(--warning); border-radius: 10px; padding: 0.75rem 1rem; font-size: 0.85rem; color: var(--warning); margin-bottom: 1rem; line-height: 1.5; }
+        .name-input-row { display: flex; gap: 0.5rem; margin-bottom: 0.6rem; }
+        .name-input { flex: 1; min-width: 0; padding: 0.75rem 0.85rem; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text); font-size: 1rem; }
+        .name-input:focus { outline: none; border-color: var(--accent-bright); }
+        .btn-add { padding: 0 1.2rem; border-radius: 10px; border: none; background: var(--accent); color: white; font-weight: 800; font-size: 1.4rem; line-height: 1; cursor: pointer; flex-shrink: 0; }
+        .btn-add:active { transform: scale(0.93); background: var(--accent-bright); }
+        .setup-msg { color: var(--danger); font-size: 0.8rem; margin: -0.2rem 0 0.6rem; text-align: left; }
+        .setup-count { font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.5rem; text-align: left; }
+        .remove-btn { background: none; border: none; color: var(--text-dim); font-size: 1.15rem; line-height: 1; cursor: pointer; padding: 0.25rem 0.4rem; flex-shrink: 0; }
+        .remove-btn:hover { color: var(--danger); }
+        .bye-badge { display: flex; align-items: center; gap: 0.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 0.6rem 0.85rem; font-size: 0.85rem; color: var(--text-dim); margin-bottom: 0.75rem; }
+        .bye-badge strong { color: var(--gold); }
 
         /* ================================================================
            STANDINGS LIST
@@ -257,11 +269,7 @@
 // ================================================================
 //  DATA
 // ================================================================
-const PLAYERS = [
-    'Rytter','Linnet','Jones','Martin','Dan',
-    'Bo','Mikkel','Marco','John','Alexander'
-];
-const WIN_SCORE = 21; // Antaget vinder-score
+const WIN_SCORE = 15; // Antaget vinder-score
 
 // ================================================================
 //  STATE
@@ -269,23 +277,44 @@ const WIN_SCORE = 21; // Antaget vinder-score
 let state = {
     phase: 'setup',   // setup | playing | between | finished
     round: 0,
-    losses: initLosses(),  // bruges til Swiss-parring
-    matches: [],           // [{p1,p2,winner,loserScore,confirmed}]
-    history: [],           // array af færdige runde-arrays
+    players: [],            // spillernavne, tilføjet i appen
+    losses: {},             // bruges til Swiss-parring
+    byes: {},               // antal gange hver spiller har siddet over
+    currentBye: null,       // spiller der sidder over i denne runde (eller null)
+    matches: [],            // [{p1,p2,winner,loserScore,confirmed}]
+    history: [],            // array af {matches, bye} pr. færdig runde
     played: new Set(),
+    setupMsg: '',
 };
 let revealStep = 0;
 
-function initLosses() {
-    return Object.fromEntries(PLAYERS.map(p => [p, 0]));
+// ================================================================
+//  ESCAPING — spillernavne er nu fri tekst, så vi undgår at
+//  ødelægge markup/onclick hvis nogen bruger fx anførselstegn.
+// ================================================================
+function esc(s) {
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+function escJs(s) {
+    return String(s)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
 }
 
 // ================================================================
 //  STATS — beregner wins/losses/diff fra bekræftede kampe
 // ================================================================
 function computeStats() {
-    const s = Object.fromEntries(PLAYERS.map(p => [p, { w:0, l:0, diff:0 }]));
-    const all = [...state.history.flat(), ...state.matches.filter(m => m.confirmed)];
+    const s = Object.fromEntries(state.players.map(p => [p, { w:0, l:0, diff:0 }]));
+    const all = [...state.history.flatMap(r => r.matches), ...state.matches.filter(m => m.confirmed)];
     for (const m of all) {
         if (!m.winner) continue;
         const loser = m.winner === m.p1 ? m.p2 : m.p1;
@@ -300,7 +329,7 @@ function computeStats() {
 
 function sortedByStandings() {
     const stats = computeStats();
-    return [...PLAYERS].sort((a, b) => {
+    return [...state.players].sort((a, b) => {
         // Flest tab = værst (stigende)
         const ld = stats[b].l - stats[a].l;
         if (ld !== 0) return ld;
@@ -323,9 +352,29 @@ function shuffle(arr) {
     return a;
 }
 
+// Ved ulige antal spillere: vælg hvem der sidder over.
+// Den/de med færrest byes indtil nu er kandidater, og vi undgår
+// at give bye til samme spiller to runder i træk, hvis muligt.
+function pickByePlayer(pool) {
+    if (pool.length % 2 === 0) return null;
+    const minByes = Math.min(...pool.map(p => state.byes[p] ?? 0));
+    let candidates = pool.filter(p => (state.byes[p] ?? 0) === minByes);
+    const prevBye = state.history.length ? state.history[state.history.length - 1].bye : null;
+    if (candidates.length > 1 && prevBye) {
+        const filtered = candidates.filter(p => p !== prevBye);
+        if (filtered.length > 0) candidates = filtered;
+    }
+    return candidates[Math.floor(Math.random() * candidates.length)];
+}
+
 function drawMatches() {
+    const bye = pickByePlayer(state.players);
+    state.currentBye = bye;
+    if (bye) state.byes[bye] = (state.byes[bye] ?? 0) + 1;
+    const pool = bye ? state.players.filter(p => p !== bye) : [...state.players];
+
     const groups = {};
-    for (const p of PLAYERS) {
+    for (const p of pool) {
         const l = state.losses[p];
         if (!groups[l]) groups[l] = [];
         groups[l].push(p);
@@ -341,16 +390,54 @@ function drawMatches() {
         }
         if (ok) return pairs;
     }
-    const r = shuffle(PLAYERS);
-    return Array.from({length:5}, (_,i) => ({
+    const r = shuffle(pool);
+    return Array.from({length: pool.length/2}, (_,i) => ({
         p1:r[i*2], p2:r[i*2+1], winner:null, loserScore:0, confirmed:false
     }));
+}
+
+// ================================================================
+//  SETUP — tilføj/fjern spillere
+// ================================================================
+function addPlayerFromInput() {
+    const input = document.getElementById('name-input');
+    if (!input) return;
+    const name = input.value.trim();
+    state.setupMsg = '';
+    if (!name) return;
+    if (name.length > 20) {
+        state.setupMsg = 'Navn er for langt (maks 20 tegn)';
+        render();
+        return;
+    }
+    if (state.players.some(p => p.toLowerCase() === name.toLowerCase())) {
+        state.setupMsg = 'Navnet er allerede tilføjet';
+        vibrate([80]);
+        render();
+        return;
+    }
+    state.players.push(name);
+    render();
+    const newInput = document.getElementById('name-input');
+    if (newInput) newInput.focus();
+}
+
+function removePlayer(name) {
+    state.players = state.players.filter(p => p !== name);
+    state.setupMsg = '';
+    render();
 }
 
 // ================================================================
 //  ACTIONS
 // ================================================================
 function startTournament() {
+    if (state.players.length < 3) return;
+    state.losses = Object.fromEntries(state.players.map(p => [p, 0]));
+    state.byes = Object.fromEntries(state.players.map(p => [p, 0]));
+    state.history = [];
+    state.played = new Set();
+    state.currentBye = null;
     state.phase = 'playing';
     state.round = 1;
     state.matches = drawMatches();
@@ -397,7 +484,7 @@ function confirmMatch(idx) {
     vibrate([50, 30, 50]);
 
     if (state.matches.every(x => x.confirmed)) {
-        state.history.push([...state.matches]);
+        state.history.push({ matches: [...state.matches], bye: state.currentBye });
         state.phase = 'between';
     }
     render();
@@ -438,7 +525,8 @@ function revealNext() {
 }
 
 function restart() {
-    state = { phase:'setup', round:0, losses:initLosses(), matches:[], history:[], played:new Set() };
+    const keepPlayers = [...state.players];
+    state = { phase:'setup', round:0, players:keepPlayers, losses:{}, byes:{}, currentBye:null, matches:[], history:[], played:new Set(), setupMsg:'' };
     revealStep = 0;
     render();
 }
@@ -491,7 +579,7 @@ function renderShameBoard() {
                 const dc   = diffCls(st.diff);
                 return `<div class="sp ${cls}">
                     <span class="sp-icon">${icon}</span>
-                    <span class="sp-name">${p}</span>
+                    <span class="sp-name">${esc(p)}</span>
                     <div class="sp-stats">
                         <span class="sp-loss">${st.l} tab</span>
                         ${anyLosses ? `<span class="sp-diff ${dc}">${ds}</span>` : ''}
@@ -518,13 +606,13 @@ function renderMatch(m, idx) {
             ${hs ? `<span class="high-stakes-badge">⚡ Højrisiko</span>` : ''}
         </div>
         <div class="match-row">
-            <button class="pb" onclick="pickWinner(${idx},'${m.p1}')">
-                ${m.p1}
+            <button class="pb" onclick="pickWinner(${idx},'${escJs(m.p1)}')">
+                ${esc(m.p1)}
                 <span class="pb-risk ${r1}">${RISK_ICON[r1]} ${RISK_LABEL[r1]}</span>
             </button>
             <div class="vs">VS</div>
-            <button class="pb" onclick="pickWinner(${idx},'${m.p2}')">
-                ${m.p2}
+            <button class="pb" onclick="pickWinner(${idx},'${escJs(m.p2)}')">
+                ${esc(m.p2)}
                 <span class="pb-risk ${r2}">${RISK_ICON[r2]} ${RISK_LABEL[r2]}</span>
             </button>
         </div>
@@ -538,12 +626,12 @@ function renderMatch(m, idx) {
             <span class="match-num">Kamp ${idx+1}</span>
         </div>
         <div class="match-row">
-            <button class="pb pending-win" disabled>${m.winner}<br><span style="font-size:0.7rem">🏆 Vinder</span></button>
+            <button class="pb pending-win" disabled>${esc(m.winner)}<br><span style="font-size:0.7rem">🏆 Vinder</span></button>
             <div class="vs">VS</div>
-            <button class="pb pending-lose" disabled>${loser}<br><span style="font-size:0.7rem">😬 Taber</span></button>
+            <button class="pb pending-lose" disabled>${esc(loser)}<br><span style="font-size:0.7rem">😬 Taber</span></button>
         </div>
         <div class="score-entry">
-            <div class="score-entry-title">Hvad scorede <strong>${loser}</strong>? Tryk på tallet:</div>
+            <div class="score-entry-title">Hvad scorede <strong>${esc(loser)}</strong>? Tryk på tallet:</div>
             <div class="score-grid">
                 ${Array.from({length: WIN_SCORE}, (_,i) => `<button class="score-pick" onclick="selectLoserScore(${idx},${i})">${i}</button>`).join('')}
             </div>
@@ -561,12 +649,12 @@ function renderMatch(m, idx) {
         </div>
         <div class="match-row">
             <button class="pb winner" disabled>
-                ${m.winner}
+                ${esc(m.winner)}
                 <span class="pb-result">🏆 ${WIN_SCORE} point</span>
             </button>
             <div class="vs">${WIN_SCORE}-${m.loserScore}</div>
             <button class="pb loser" disabled>
-                ${loser}
+                ${esc(loser)}
                 <span class="pb-result">😱 ${m.loserScore} point</span>
             </button>
         </div>
@@ -587,7 +675,7 @@ function renderStandings() {
             return `<div class="st-item ${cls}">
                 <span class="st-rank">${i+1}.</span>
                 <span class="st-icon">${icons[i]||'✅'}</span>
-                <span class="st-name">${p}</span>
+                <span class="st-name">${esc(p)}</span>
                 <span class="st-diff ${dc}">${ds}</span>
                 <span class="st-loss">${st.l} tab</span>
             </div>`;
@@ -600,6 +688,10 @@ function renderStandings() {
 // ================================================================
 
 function renderSetup() {
+    const n = state.players.length;
+    const oddNote = (n > 0 && n % 2 === 1)
+        ? `<div class="setup-warning">🪑 <strong>Ulige antal (${n}):</strong> Én spiller sidder over hver runde. Det roterer automatisk, så alle sidder lige mange gange over i løbet af turneringen.</div>`
+        : '';
     return `
     <div class="container">
         <div class="setup">
@@ -610,19 +702,34 @@ function renderSetup() {
                 Det handler om <strong>ikke at tabe</strong>.<br>
                 De 2 største tabere får konsekvenser!
             </p>
+
+            <div class="name-input-row">
+                <input id="name-input" class="name-input" type="text" placeholder="Skriv et navn..."
+                    maxlength="20" autocomplete="off"
+                    onkeydown="if(event.key==='Enter'){addPlayerFromInput()}">
+                <button class="btn-add" onclick="addPlayerFromInput()">+</button>
+            </div>
+            ${state.setupMsg ? `<div class="setup-msg">${esc(state.setupMsg)}</div>` : ''}
+            <div class="setup-count">${n} spiller${n===1?'':'e'} tilføjet${n<3 ? ' — mindst 3 kræves' : ''}</div>
+
             <div class="setup-players">
-                ${PLAYERS.map((p,i) => `
+                ${n === 0
+                    ? `<div class="setup-empty">Ingen spillere endnu. Tilføj navne ovenfor.</div>`
+                    : state.players.map((p,i) => `
                     <div class="setup-player">
                         <span class="setup-num">${i+1}.</span>
-                        <span class="setup-name">${p}</span>
+                        <span class="setup-name">${esc(p)}</span>
+                        <button class="remove-btn" onclick="removePlayer('${escJs(p)}')">✕</button>
                     </div>`).join('')}
             </div>
+
+            ${oddNote}
             <div class="setup-warning">
                 ⚠️ <strong>Reglerne:</strong> Spil runder. Indskriv resultater.
                 Rang afgøres af <em>tab</em> — og ved uafgjort: <em>point-difference</em>.
                 De 2 i bunden lider konsekvenserne.
             </div>
-            <button class="btn btn-primary" onclick="startTournament()">🎯 Start Turneringen</button>
+            <button class="btn btn-primary" ${n < 3 ? 'disabled' : ''} onclick="startTournament()">🎯 Start Turneringen</button>
         </div>
     </div>`;
 }
@@ -632,13 +739,14 @@ function renderPlaying() {
     const total = state.matches.length;
     const pct   = Math.round((done/total)*100);
     const stats = computeStats();
-    const topL  = Math.max(...PLAYERS.map(p => stats[p].l));
+    const topL  = Math.max(...state.players.map(p => stats[p].l));
     return `
     <header>
         <span class="header-title">🎯 Skam-Cup</span>
         <span class="round-pill ${topL >= 2 ? 'danger-pill' : ''}">Runde ${state.round}</span>
     </header>
     <div class="container">
+        ${state.currentBye ? `<div class="bye-badge">🪑 <strong>${esc(state.currentBye)}</strong> sidder over denne runde</div>` : ''}
         ${renderShameBoard()}
         <div class="section-label">Kampe — ${done}/${total} færdige</div>
         <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
@@ -659,13 +767,14 @@ function renderBetween() {
         </div>
         <div class="round-summary">
             <div class="rs-title">Resultater fra runde ${state.round}</div>
-            ${last.map(m => {
+            ${last.matches.map(m => {
                 const loser = m.winner === m.p1 ? m.p2 : m.p1;
                 return `<div class="rs-item">
-                    <span class="win">${m.winner}</span> slog <span class="lose">${loser}</span>
+                    <span class="win">${esc(m.winner)}</span> slog <span class="lose">${esc(loser)}</span>
                     <span class="sc">${WIN_SCORE}–${m.loserScore}</span>
                 </div>`;
             }).join('')}
+            ${last.bye ? `<div class="rs-item">🪑 <span style="color:var(--text-dim)">${esc(last.bye)} sad over</span></div>` : ''}
         </div>
         ${renderShameBoard()}
         <div class="section-label">Samlet stilling</div>
@@ -701,7 +810,7 @@ function renderFinished() {
         const lbl = place === 1 ? '😱 Største Taber — 1. plads i skam 😱' : '😰 Næststørste Taber — 2. plads i skam';
         return `<div class="shame-card ${anim?'reveal-anim':''} glow">
             <div class="sc-label">${lbl}</div>
-            <div class="sc-name">${p}</div>
+            <div class="sc-name">${esc(p)}</div>
             <div class="sc-stat">${st.l} tab · ${ds} point</div>
         </div>`;
     }
@@ -731,7 +840,7 @@ function renderFinished() {
             <div class="safe-block">
                 <div class="safe-title">✅ Slap heldigt — denne gang</div>
                 <div class="safe-chips">
-                    ${safe.map(p => `<span class="safe-chip">${p} <span class="lc">(${stats[p].l} tab)</span></span>`).join('')}
+                    ${safe.map(p => `<span class="safe-chip">${esc(p)} <span class="lc">(${stats[p].l} tab)</span></span>`).join('')}
                 </div>
             </div>
             <div style="margin-top:1.5rem">${renderStandings()}</div>
